@@ -1,354 +1,109 @@
 ---
-title: "Machine Learning Final"
+title: "Vaccination Data"
 author: "Megan Marziali"
-date: "4/8/2021"
-output: word_document
+date: "4/11/2021"
+output: github_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
-library(caret)
-library(rpart.plot)
-library(Amelia)
-library(arsenal)
-library(factoextra)
-library(cluster)
+library(readxl)
 
 set.seed(100)
 ```
 
-# Part 1: Dietary patterns using unsupervised analysis
+# Import data
 
-## Question 1: Construct a research question
-
-Research question: Do dietary patterns during pregnancy predict postpartum mental health symptoms?
-
-The goal of this unsupervised analysis will be to develop classes of dietary patterns among women during pregnancy. These classes will be used as an exposure in future analyses, aiming to predict whether dietary patterns during pregnancy are predictive of postpartum mental health symptoms (such as postpartum depression). This is a predictive research question.
-
-## Question 2: Running appropriate unsupervised analysis
+Importing data and stripping vaccination numbers.
 
 ```{r message = FALSE, results = FALSE, warning = FALSE}
-diet.data = 
-  read.csv("./data/diet_data.csv", header = TRUE) %>% 
+vacc.data = 
+  read.csv("./data/owid-covid-data.csv", header = TRUE) %>% 
+  janitor::clean_names() %>% 
+  separate(
+    date,
+    sep = "-",
+    into = c("year", "month", "day")
+  ) %>% 
   select(
-    "h_cereal_preg_Ter",
-    "h_dairy_preg_Ter",
-    "h_fastfood_preg_Ter",
-    "h_fish_preg_Ter",
-    "h_fruit_preg_Ter",
-    "h_legume_preg_Ter",
-    "h_meat_preg_Ter",
-    "h_veg_preg_Ter",
+    "iso_code",
+    "location",
+    "year",
+    "month",
+    "day",
+    "total_vaccinations"
   )
 
-# Scaling data
-colMeans(diet.data, na.rm = TRUE)
-apply(diet.data, 2, sd, na.rm = TRUE)
-
-scale(diet.data, center = TRUE, scale = TRUE)
-```
-
-I restricted the data to variables which assessed dietary patterns during pregnancy. The total dataset is comprised of 1301 observations, and 8 variables.
-
-```{r message = FALSE, warning = FALSE}
-missmap(diet.data, main = "Missing values vs observed")
-```
-
-I used missmap to determine if there are any missing observations, which there are not. To determine clusters within the data, a hierarchical cluster analysis with the complete linkage method will be carried out.
-
-```{r message = FALSE, warning = FALSE}
-set.seed(100)
-
-# Create Dissimilarity matrix
-diss.matrix = dist(diet.data, method = "euclidean")
-
-#Identifying the optimal number of clusters given complete linkage method
-gap_stat_c = clusGap(diet.data, FUN = hcut, hc_method = "complete", K.max = 10, B = 5)
-fviz_gap_stat(gap_stat_c)
-
-#Characterizing the clusters
-clusters.c = hcut(diet.data, k = 2, hc_func = "hclust", hc_method = "complete", hc_metric = "euclidian")
-
-clusters.c$size
-fviz_dend(clusters.c, rect = TRUE)
-fviz_cluster(clusters.c)
-```
-
-The optimal number of clusters within this data is *2* clusters. There are 840 observations in the first cluster, and 461 observations in the second cluster.
-
-```{r message = FALSE, warning = FALSE}
-input.feature.vals = cbind(diet.data, cluster = clusters.c$cluster)
-input.feature.vals %>%
- group_by(cluster) %>%
- summarise_all(mean) %>% 
-  knitr::kable()
-```
-
-The first cluster has less cereal consumed during pregnancy by mothers than the second cluster; respondents also consumed slightly more dairy, fast food, fish and legumes. Those in the second cluster consumed more cereal and slightly more fruit and meats. Both clusters consumed approximately the same amount of vegetables.
-
-# Part 2: Choose your own supervised adventure
-
-## Research question
-
-The goal of this analysis is to generate hypotheses regarding dietary patterns and toxic metals during pregnancy on child externalizing and internalizing behaviors. This hypotheses generating analysis will guide future research on the role of nutrition on child behaviors, and whether interactions between dietary patterns and toxic metals are salient for child behaviors. This is being done to generate hypotheses regarding the importance of both toxins in the built environment and maternal nutrition on child well-being, and to gain a better understanding of how these factors interact in relation to child health outcomes.
-
-## Loading and preparing data
-
-Loading data into single data frame.
-
-```{r dataprep, message = FALSE, warning = FALSE}
-#Load data using path of where file is stored
-load("./data/exposome.RData")
-
-studydata = 
-  merge(exposome,phenotype,by = "ID") %>% 
-  merge(covariates, by = "ID")
-
-studydata$ID = NULL
-```
-
-Data cleaning and selecting relevant features to research question. The outcome of interest, the CBCL scale assessing child internalizing and externalizing behaviors, was dichotomized at a cut-off of 60 which has been shown to be a clinically relevant score (Biederman et al., 1993).
-
-```{r message = FALSE, warning = FALSE}
-studydata  = studydata %>% 
-  select(h_cereal_preg_Ter,
-         h_dairy_preg_Ter,
-         h_fastfood_preg_Ter,
-         h_fish_preg_Ter,
-         h_folic_t1_None,
-         h_fruit_preg_Ter,
-         h_legume_preg_Ter,
-         h_meat_preg_Ter,
-         hs_as_m_Log2,
-         hs_cd_m_Log2,
-         hs_co_m_Log2,
-         hs_cs_m_Log2,
-         hs_cu_m_Log2,
-         hs_hg_m_Log2,
-         hs_mn_m_Log2,
-         hs_mo_m_Log2,
-         hs_pb_m_Log2,
-         hs_tl_mdich_None,
-         hs_dde_madj_Log2,
-         hs_ddt_madj_Log2,
-         hs_hcb_madj_Log2,
-         hs_pcb118_madj_Log2,
-         hs_pcb138_madj_Log2,
-         hs_pcb153_madj_Log2,
-         hs_pcb170_madj_Log2,
-         hs_pcb180_madj_Log2,
-         hs_sumPCBs5_madj_Log2,
-         hs_dep_madj_Log2,
-         hs_detp_madj_Log2,
-         hs_dmp_madj_Log2,
-         hs_dmtp_madj_Log2,
-         hs_pbde153_madj_Log2,
-         hs_pbde47_madj_Log2,
-         hs_pfhxs_m_Log2,
-         hs_pfna_m_Log2,
-         hs_pfoa_m_Log2,
-         hs_pfos_m_Log2,
-         hs_pfunda_m_Log2,
-         hs_bpa_madj_Log2,
-         hs_bupa_madj_Log2,
-         hs_etpa_madj_Log2,
-         hs_mepa_madj_Log2,
-         hs_oxbe_madj_Log2,
-         hs_prpa_madj_Log2,
-         hs_trcs_madj_Log2,
-         hs_mbzp_madj_Log2,
-         hs_mecpp_madj_Log2,
-         hs_mehhp_madj_Log2,
-         hs_mehp_madj_Log2,
-         hs_meohp_madj_Log2,
-         hs_mep_madj_Log2,
-         hs_mibp_madj_Log2,
-         hs_mnbp_madj_Log2,
-         hs_ohminp_madj_Log2,
-         hs_oxominp_madj_Log2,
-         hs_sumDEHP_madj_Log2,
-         e3_asmokcigd_p_None,
-         hs_cotinine_mcat_None,
-         hs_Gen_Tot
-         ) 
-
-data.rec = studydata %>% 
-  mutate(
-    behav = cut(hs_Gen_Tot, 
-                breaks = c(-Inf, 60, Inf),
-                labels = c("0", "1"))
+case.data = 
+  read.csv("./data/owid-covid-data.csv", header = TRUE) %>% 
+  janitor::clean_names() %>% 
+  separate(
+    date,
+    sep = "-",
+    into = c("year", "month", "day")
   ) %>% 
-  select(-hs_Gen_Tot) %>% 
-  select(everything(), behav)
+  select(
+    "iso_code",
+    "location",
+    "year",
+    "month",
+    "day",
+    "total_cases"
+  )
+
+test.data = 
+  read.csv("./data/owid-covid-data.csv", header = TRUE) %>% 
+  janitor::clean_names() %>% 
+  separate(
+    date,
+    sep = "-",
+    into = c("year", "month", "day")
+  ) %>% 
+  select(
+    "iso_code",
+    "location",
+    "year",
+    "month",
+    "day",
+    "total_tests"
+  )
 ```
 
-Data exploration.
-
-```{r message = FALSE, warning = FALSE, results = "asis"}
-# Investigating missing data
-missmap(studydata)
-
-# No missingness observed.
-
-# Exploring continuous/categorical variables of interest
-table.1 = tableby(~ behav + h_fastfood_preg_Ter + h_dairy_preg_Ter +
-                    h_meat_preg_Ter + hs_as_m_Log2 + hs_pfoa_m_Log2 + hs_cotinine_mcat_None,
-                  data = data.rec,
-        numeric.stats = c("mean","median", "range"))
-summary(table.1, text = TRUE)
-```
-
-Overall, 1301 participants are included in this dataset. Of those, 66 (5.1%) children scored above 60 on the CBCL scale, suggesting that they have internalizing and externalizing behaviors. The data is unbalanced, which will be taken into account by down-sampling.
-
-Partitioning data.
-
-```{r message = FALSE, warning = FALSE}
-set.seed(100)
-
-#Partition data for use in demonstration
-train.indices = createDataPartition(y = data.rec$behav, p = 0.7,list = FALSE)
-training = data.rec[train.indices, ]
-testing = data.rec[-train.indices, ]
-```
-
-## First Algorithm: Using LASSO for Feature Selection
-
-Hyperparameter tuning and initial accuracy testing.
-
-```{r, warning = FALSE, message = FALSE}
-set.seed(100)
-
-#Create grid to search lambda
-lambda = 10^seq(-3,3, length = 100)
-
-lasso.m1 = train(
-  behav ~., 
-  data = training, 
-  method = "glmnet", 
-  trControl = trainControl("cv", number = 10, sampling = "down"), 
-  tuneGrid = expand.grid(alpha = 0, lambda = lambda)
-)
-
-#Print the values of alpha and lambda that gave best prediction
-lasso.m1$bestTune
-
-# Model coefficients
-coef(lasso.m1$finalModel, lasso.m1$bestTune$lambda)
-varImp(lasso.m1)
-
-# Make predictions
-pred.lasso.1 = predict(lasso.m1, training)
-pred.lasso.prob.1 = predict(lasso.m1, training, type = "prob")
-
-# Model prediction performance
-eval.results = confusionMatrix(pred.lasso.1, training$behav, positive = "1")
-print(eval.results)
-
-#Accuracy of this model is 0.58
-```
-
-## Second Algorithm: Elastic Net
+Selecting data within time period.
 
 ```{r}
-set.seed(100)
+vacc.rec = vacc.data %>% 
+  filter(
+    year == "2021",
+    month == "03",
+    day == "10"
+  )
 
-alpha = seq(0,1, length = 100)
+case.rec = case.data %>% 
+  filter(
+    year == "2021",
+    month == "03",
+    day == "10"
+  )
 
-en.m = train(
-  behav ~., 
-  data = training, 
-  method = "glmnet", 
-  trControl = trainControl("cv", number = 10, sampling = "down"), 
-  tuneGrid = expand.grid(alpha = alpha, lambda = lambda)
-)
-
-#Print the values of alpha and lambda that gave best prediction
-en.m$bestTune
-
-# Model coefficients
-coef(en.m$finalModel, en.m$bestTune$lambda)
-varImp(en.m)
-
-# Make predictions
-pred.en = predict(en.m, training)
-pred.en.prob = predict(en.m, training, type = "prob")
-
-# Model prediction performance
-eval.results = confusionMatrix(pred.en, training$behav, positive = "1")
-print(eval.results)
-
-#Accuracy of this model is 0.49
+test.rec = test.data %>% 
+  filter(
+    year == "2021",
+    month == "03",
+    day == "10"
+  )
 ```
 
-Given that the LASSO model produced slightly better accuracy than the elastic net model, the LASSO model will be used for final accuracy testing.
+Export.
 
-### Final accuracy testing
+```{r}
+write.csv(vacc.rec,"./data/vacc_03_2021.csv")
 
-```{r message = FALSE, warning = FALSE}
-set.seed(100)
+write.csv(case.rec,"./data/case_03_2021.csv")
 
-# Using best fit model from above with testing data
-pred.lasso.f = predict(lasso.m1, testing)
-pred.lasso.f.prob = predict(lasso.m1, testing, type = "prob")
-
-# Evaluating in testing data with confusion matrix
-eval.results = confusionMatrix(pred.lasso.f, testing$behav, positive = "1")
-print(eval.results)
+write.csv(test.rec,"./data/test_03_2021.csv")
 ```
-
-Final accuracy testing shows that the accuracy of the LASSO model is 0.50. The LASSO model suggests that the most important variable is medium cereal consumption, followed by copper blood levels, medium meat consumption, high dairy consumption, and medium legume consumption. The elastic net model suggests that the most important variable is high legume consumption, high fish consumption, cesium blood levels, mercury blood levels, and high dairy consumption. Given that the LASSO model had greater accuracy, emphasis will be placed on those variables for future exploration. However, given that legume and dairy consumption were both among the top variables of importance in both the elastic net and LASSO models, there is support to explore these dietary components in greater detail.
-
-# Part 3: Ethical considerations of data-driven analysis in social epidemiology
-
-## Question 1
-
-*Braithwaite SR, Giraud-Carrier C, West J, Barnes MD, Hanson CL. Validating machine learning algorithms for Twitter data against established measures of suicidality. JMIR Ment Health, 2016: 3(2): e21.*
-
-#### Quality of analysis 
-
-The paper that I've selected to analyze is the Braithwaite et al. (2016) paper predicting suicide from Twitter data. Overall, I do not think this paper is helpful in predicting early detection of suicidality. One thing that immediately stood out to me pertaining to the quality of analysis is the data quality. We’ve talked a lot in class about “garbage in, garbage out” and I think this paper is a good example of issues that arise when you use problematic data. Firstly, the authors explain that they carried out study recruitment at two different time periods, as initial recruitment did not result in a sufficient number of participants. This is important given that their exclusion criteria involved needing to tweet within the last month, and participants recruited in the initial stage could theoretically not have been included in the second phase. Unfortunately, the authors do not have the power to stratify by recruitment period or take into account any time component.
-
-The authors also opted to use a decision tree algorithm for feature selection and variable importance. It would have been interesting to see how this compares to LASSO. The authors found that tweeting in the “achieve”, “religion” or “relativity” categories are predictive for being nonsuicidal. These seem very arbitrary, particularly since the “relativity” category is related to theories of relativity, and do not seem to be trustworthy features of importance when considering suicidality.
-
-#### Bias
-
-The authors describe recruiting through Mechanical Turk (MTurk), which is an Amazon-led form of task deployment where workers can sign up to do tasks for a negligible amount of money. As described in the paper, participants were paid the "market rate", which was a shocking 30-50 cents. Immediately, this should be cause for concern; people willing to participate in a study for a mere 30 cents are likely not representative of the general population or the average social media user in the US. Therefore, while the authors frame this study as being relevant for the US population, I don’t believe that is accurate.
-
-To understand potential bias, the authors should have presented more detailed sociodemographic characteristics. The authors fail to report the average age of the participants, which would be important when understanding suicide, particularly as age is a risk factor. Additionally, the authors don't present information on sex. As men are at higher risk of suicide than women, this information would have been important to present as well for understanding potential bias.
-
-#### Details of methodology
-
-At the recruitment stage, the authors excluded 77 participants without explanation for why these participants were excluded. They do present some exclusion criteria, but it would have been more transparent to explain clearly why participants were excluded.
-
-The authors failed to describe how they split their data and whether they split 70/30. They also failed to describe whether and how they varied their hyperparameters, which would have been "cp" in this algorithm. They do mention that they used leave-one-out cross-validation, but don't mention what they set their cross-validation parameter as, and instead note that they repeated cross-validation N times. Lastly, they should have taken into account the unbalanced data but do not describe any approach in doing so.
-
-## Question 2
-
-In this paper, the authors suggest creating some type of system that includes text messaging to reach individuals who the algorithm identify as being at risk of suicide. However, given that the algorithm identified somewhat arbitrary text and was trained on a small number of users, it seems that it may misidentify users at risk of suicide. If this algorithm is implemented in real time, it could be harmful if users are flagged for suicidal behavior without actually exhibiting suicidal behavior. This could lead to self-fulfilling behavior, in that being told they are at risk of suicide, or repeatedly reminded of suicide, actually places them at higher risk of suicide.
-
-At an ecological level, there exist disparities in internet access across the United States. Counties or neighborhoods could be identified as having users with high rates of suicide, or high rates of suicidal behavior, and resources could be funneled towards these neighborhoods. Counties with lower internet access and fewer users, such as those in rural areas, may not be allocated resources because they were not identified as having users with high suicide rates. Given associations between rurality and suicide, this could be potentially harmful for rural communities who are in need of these resources.
-
-## Question 3
-
-Safeguards at the individual level would involve ensuring that users could opt-out of any possible intervention. By doing so, users would not be subject to unwanted text messages about potential suicidal behavior and avoid triggering social media users and putting them in an emotionally vulnerable state.
-
-At the policy level, safeguards should include not making funding decisions based solely from data collected via social media. Policymakers should be well-versed in understanding disparities in internet access, and should not consider allocating funding using results from analyses of social media.
-
-# References
-
-Biderman J, Faraone SV, Doyle A, Lehman BK, Kraus I, Perrin J, Tsuang MT. Convergence of the Child Behavior Checklist with structured interview-based psychiatric diagnoses of ADHD children with and without comorbidity. J Child Psychiat, 1993: 34(7); 1241-1251.
-
-Braithwaite SR, Giraud-Carrier C, West J, Barnes MD, Hanson CL. Validating machine learning algorithms for Twitter data against established measures of suicidality. JMIR Ment Health, 2016: 3(2): e21.
-
-
-
-
-
-
-
-
-
 
 
