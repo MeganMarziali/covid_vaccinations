@@ -33,7 +33,9 @@ vacc.data =
     "year",
     "month",
     "day",
-    "total_vaccinations"
+    "total_vaccinations",
+    "people_vaccinated",
+    "people_fully_vaccinated"
   )
 
 case.data = 
